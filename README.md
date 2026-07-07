@@ -13,7 +13,7 @@
 
 ## 📖 项目背景
 
-这是一个面向 **2027 年校招** 的作品集项目，灵感来自于我在 **eBay 中国分析中心 (CBT Business Analytics)** 的实习经历。
+这个项目的灵感来自于我在 **eBay 中国分析中心 (CBT Business Analytics)** 的实习经历。
 
 在实习期间，我观察到业务分析的典型流程：
 
@@ -329,14 +329,6 @@ fly deploy
 
 ---
 
-## 👤 作者
-
-**[Your Name]**
-
-- 曾实习于 eBay 中国分析中心 (CBT Business Analytics)
-- 专注于 AI + 数据分析产品
-- 联系方式：[your.email@example.com](mailto:your.email@example.com)
-- LinkedIn: [linkedin.com/in/yourprofile](https://linkedin.com/in/yourprofile)
 
 ---
 
@@ -348,5 +340,3 @@ fly deploy
 - eBay China Analytics Team - 灵感来源
 
 ---
-
-**Built with ❤️ for 2027 Campus Recruiting**
