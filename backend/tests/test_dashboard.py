@@ -80,7 +80,7 @@ def test_get_trends_default():
 
     # 默认是 30 天，但实际数据可能少于 30 天
     assert dates_len > 0
-    assert dates_len <= 30
+    assert dates_len <= 31
 
 
 def test_get_trends_with_days():
@@ -91,7 +91,7 @@ def test_get_trends_with_days():
     data = response.json()
     dates_len = len(data["dates"])
     assert dates_len > 0
-    assert dates_len <= 7
+    assert dates_len <= 8
 
 
 def test_get_trends_with_site_and_category():

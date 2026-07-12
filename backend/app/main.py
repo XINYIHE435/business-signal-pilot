@@ -136,12 +136,15 @@ async def health_check():
 # ============================================================
 
 from app.api import dashboard_router
+from app.api.chat import router as chat_router
 
 # 注册 Dashboard 路由
 app.include_router(dashboard_router)
 
+# 注册 Chat 路由（Phase 2）
+app.include_router(chat_router)
+
 # 待添加的路由：
-# - /api/v1/chat/*
 # - /api/v1/diagnosis/*
 # - /api/v1/report/*
 

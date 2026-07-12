@@ -22,7 +22,8 @@ class LLMClient:
         # 初始化 Claude
         if settings.anthropic_api_key:
             self.claude_client = AsyncAnthropic(
-                api_key=settings.anthropic_api_key
+                api_key=settings.anthropic_api_key,
+                base_url=settings.ANTHROPIC_BASE_URL
             )
             logger.info("claude_client_initialized")
 
@@ -64,7 +65,7 @@ class LLMClient:
 
         try:
             response = await self.claude_client.messages.create(
-                model="claude-3-5-sonnet-20241022",
+                model="claude-sonnet-4-5-20250929",
                 max_tokens=max_tokens,
                 temperature=temperature,
                 system=system if system else "You are a helpful AI assistant.",

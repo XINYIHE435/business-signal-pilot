@@ -24,13 +24,14 @@ class Database:
     def connect(self) -> duckdb.DuckDBPyConnection:
         """获取数据库连接"""
         if self._conn is None:
-            db_path = Path(__file__).parent.parent.parent / settings.database_path
+            db_path = Path(__file__).parent.parent.parent.parent / settings.database_path
+            print(f"数据库路径: {db_path}")
 
             if not db_path.exists():
                 logger.error("database_not_found", path=str(db_path))
                 raise FileNotFoundError(f"数据库文件不存在: {db_path}")
 
-            self._conn = duckdb.connect(str(db_path), read_only=False)
+            self._conn = duckdb.connect(str(db_path), read_only=True)
             logger.info("database_connected", path=str(db_path))
 
         return self._conn

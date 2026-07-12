@@ -18,11 +18,12 @@ class Settings(BaseSettings):
 
     # AI 配置
     anthropic_api_key: str = ""
+    ANTHROPIC_BASE_URL: str = "https://cn.zhihuiai.top/"
     openai_api_key: str = ""
     default_llm: str = "claude"  # claude or openai
 
     # 数据库配置
-    database_path: str = "../data/signal.db"
+    database_path: str = "data/signal.db"
 
     # API 配置
     api_host: str = "0.0.0.0"

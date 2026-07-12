@@ -12,7 +12,7 @@ import { dashboardAPI } from '@/lib/api'
 import { KPICard } from '@/components/KPICard'
 import { TrendChart } from '@/components/TrendChart'
 import { AnomalyAlert } from '@/components/AnomalyAlert'
-import { RefreshCw, AlertCircle } from 'lucide-react'
+import { RefreshCw, AlertCircle, MessageSquare } from 'lucide-react'
 
 const SITES = ['US', 'DE', 'UK', 'AU', 'FR', 'IT', 'ES', 'CA', 'CN', 'JP']
 
@@ -54,16 +54,25 @@ export default function DashboardPage() {
               </p>
             </div>
 
-            <button
-              onClick={() => {
-                refetchKPI()
-              }}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-              disabled={isLoading}
-            >
-              <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-              Refresh
-            </button>
+            <div className="flex items-center gap-3">
+              <a
+                href="/chat"
+                className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+              >
+                <MessageSquare className="h-4 w-4" />
+                AI Agent
+              </a>
+              <button
+                onClick={() => {
+                  refetchKPI()
+                }}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                disabled={isLoading}
+              >
+                <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+                Refresh
+              </button>
+            </div>
           </div>
         </div>
       </header>
