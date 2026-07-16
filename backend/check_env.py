@@ -84,7 +84,7 @@ def check_environment():
         print("    测试数据库连接...")
         try:
             from app.adapters.database import DuckDBAdapter
-            adapter = DuckDBAdapter(str(db_path), read_only=True)
+            adapter = DuckDBAdapter(str(db_path), read_only=False)
             tables = adapter._conn.execute(
                 "SELECT name FROM sqlite_master WHERE type='table'"
             ).fetchall()

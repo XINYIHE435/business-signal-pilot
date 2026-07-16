@@ -10,26 +10,54 @@ import { useState } from 'react'
 import useSWR from 'swr'
 import { dashboardAPI } from '@/lib/api'
 import { KPICard } from '@/components/KPICard'
-import { TrendChart } from '@/components/TrendChart'
+import { MultiTrendChart } from '@/components/MultiTrendChart'
 import { AnomalyAlert } from '@/components/AnomalyAlert'
+import { CategoryFilter } from '@/components/CategoryFilter'
 import { RefreshCw, AlertCircle, MessageSquare } from 'lucide-react'
 
 const SITES = ['US', 'DE', 'UK', 'AU', 'FR', 'IT', 'ES', 'CA', 'CN', 'JP']
 
+// Date range 选项
+const DATE_RANGES = [
+  { label: 'Last 7 days', value: 7 },
+  { label: 'Last 14 days', value: 14 },
+  { label: 'Last 30 days', value: 30 },
+  { label: 'Last Quarter (90 days)', value: 90 },
+  { label: '2024 Full Year', value: 365, isYear: 2024 },
+  { label: '2025 Full Year', value: 365, isYear: 2025 },
+]
+
 export default function DashboardPage() {
   const [site, setSite] = useState('DE')
   const [days, setDays] = useState(7)
+  const [category, setCategory] = useState<{ l1?: string; l2?: string }>({})
 
   // 获取 KPI 数据
   const { data: kpiData, error: kpiError, isLoading: kpiLoading, mutate: refetchKPI } = useSWR(
-    ['kpis', site, days],
-    () => dashboardAPI.getKPIs({ site, days })
+    ['kpis', site, category.l1, category.l2, days],
+    () => {
+      // 构建 category 参数：优先使用 L2，其次 L1
+      const categoryParam = category.l2 || category.l1 || undefined
+      return dashboardAPI.getKPIs({
+        site,
+        category: categoryParam,
+        days
+      })
+    }
   )
 
-  // 获取趋势数据
+  // 获取趋势数据 - 使用实际选择的天数
   const { data: trendData, error: trendError, isLoading: trendLoading } = useSWR(
-    ['trends', site, days],
-    () => dashboardAPI.getTrends({ site, days: 30 })
+    ['trends', site, category.l1, category.l2, days],
+    () => {
+      // 构建 category 参数：优先使用 L2，其次 L1
+      const categoryParam = category.l2 || category.l1 || undefined
+      return dashboardAPI.getTrends({
+        site,
+        category: categoryParam,
+        days
+      })
+    }
   )
 
   // 获取异常数据
@@ -101,16 +129,29 @@ export default function DashboardPage() {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
+                Category
+              </label>
+              <CategoryFilter
+                value={category}
+                onChange={setCategory}
+                disabled={isLoading}
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
                 Period
               </label>
               <select
                 value={days}
                 onChange={(e) => setDays(Number(e.target.value))}
-                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-w-[180px]"
               >
-                <option value={7}>Last 7 days</option>
-                <option value={14}>Last 14 days</option>
-                <option value={30}>Last 30 days</option>
+                {DATE_RANGES.map((range) => (
+                  <option key={range.label} value={range.value}>
+                    {range.label}
+                  </option>
+                ))}
               </select>
             </div>
 
@@ -163,14 +204,30 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* Trend Chart */}
+        {/* Trend Charts */}
         {trendData && (
           <div className="mb-6">
-            <TrendChart
-              dates={trendData.dates}
-              gmv={trendData.gmv}
-              title={`GMV Trend - ${site} (Last 30 Days)`}
-            />
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">Trend Analysis</h2>
+            <div className="grid grid-cols-1 gap-6">
+              <MultiTrendChart
+                dates={trendData.dates}
+                data={{ gmv: trendData.gmv }}
+                title={`GMV Trend - ${site} (Last ${days} Days)`}
+                metric="gmv"
+              />
+              <MultiTrendChart
+                dates={trendData.dates}
+                data={{ asp: trendData.asp }}
+                title={`ASP Trend - ${site} (Last ${days} Days)`}
+                metric="asp"
+              />
+              <MultiTrendChart
+                dates={trendData.dates}
+                data={{ str_rate: trendData.str_rate }}
+                title={`STR Trend - ${site} (Last ${days} Days)`}
+                metric="str"
+              />
+            </div>
           </div>
         )}
 

@@ -37,7 +37,7 @@ def test_docs():
 
 def test_database_connection():
     """测试数据库连接"""
-    from app.core.database import db
+    from app.core.database_v2 import db_v2 as db
 
     # 测试简单查询
     result = db.execute("SELECT COUNT(*) FROM daily_metrics")
@@ -48,7 +48,7 @@ def test_database_connection():
 
 def test_database_query():
     """测试数据库查询功能"""
-    from app.core.database import db
+    from app.core.database_v2 import db_v2 as db
 
     # 查询站点列表
     result = db.execute("SELECT DISTINCT site FROM daily_metrics LIMIT 5")

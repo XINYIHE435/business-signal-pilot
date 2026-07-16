@@ -67,7 +67,7 @@ def initialize_tools():
             return
 
         # 创建 Database Adapter
-        adapter = DuckDBAdapter(str(db_path), read_only=True)
+        adapter = DuckDBAdapter(str(db_path), read_only=False)
 
         # 创建并注册 Database Tool
         db_tool = DatabaseTool(adapter)

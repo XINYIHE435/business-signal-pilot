@@ -44,6 +44,8 @@ class TrendResponse(BaseModel):
     sold_items: List[int]
     ctr: List[float]
     cvr: List[float]
+    asp: List[float]
+    str_rate: List[float]  # Sell-Through Rate (renamed from 'str' to avoid Python keyword)
 
 
 class Anomaly(BaseModel):

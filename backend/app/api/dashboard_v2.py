@@ -1,10 +1,7 @@
 """
-Dashboard API 路由
+Dashboard API 路由 V2
 
-提供业务监控相关的 API 端点：
-- KPI 数据
-- 趋势数据
-- 异常检测
+支持两级分类体系，同时保持向后兼容
 """
 
 from fastapi import APIRouter, HTTPException, Query
@@ -12,7 +9,7 @@ from typing import Optional
 from datetime import datetime, timedelta
 import structlog
 
-from app.core.database import db
+from app.core.database_v2 import db_v2
 from app.models.schemas import KPIResponse, KPICard, TrendResponse, AnomalyResponse, Anomaly
 
 logger = structlog.get_logger()
@@ -20,29 +17,84 @@ logger = structlog.get_logger()
 router = APIRouter(prefix="/api/v1/dashboard", tags=["Dashboard"])
 
 
+@router.get("/business-date")
+async def get_business_date():
+    """
+    获取当前业务日期（数据库中的最大日期）
+
+    Returns:
+        dict: { "business_date": "2026-07-12", "description": "Latest available data date" }
+    """
+    try:
+        business_date = db_v2.get_max_date()
+        if not business_date:
+            raise HTTPException(status_code=500, detail="No data available in database")
+
+        return {
+            "business_date": str(business_date),
+            "description": "Latest available data date"
+        }
+    except Exception as e:
+        logger.error("business_date_fetch_failed", error=str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to fetch business date: {str(e)}")
+
+
+def build_category_filter(category: Optional[str], db_instance) -> str:
+    """
+    构建分类过滤条件（兼容 V1 和 V2 Schema）
+
+    Args:
+        category: 用户查询的分类名称
+        db_instance: 数据库实例
+
+    Returns:
+        SQL WHERE 子句
+    """
+    if not category:
+        return ""
+
+    if not db_instance.is_v2_schema():
+        # V1: 单级分类
+        return f" AND category = '{category}'"
+
+    # V2: 两级分类，智能匹配
+    mapping = db_instance.get_category_mapping(category)
+
+    if mapping.get('where_clause'):
+        return f" AND {mapping['where_clause']}"
+
+    return ""
+
+
 @router.get("/kpis", response_model=KPIResponse)
 async def get_kpis(
     site: str = Query("US", description="站点代码 (US, DE, UK, etc.)"),
-    category: Optional[str] = Query(None, description="品类（可选）"),
-    days: int = Query(7, description="对比天数", ge=1, le=90)
+    category: Optional[str] = Query(None, description="品类（可选，支持 L1 或 L2）"),
+    days: int = Query(7, description="对比天数", ge=1, le=365)
 ):
     """
     获取 Dashboard KPI 数据
 
     返回当前周期和上一周期的对比数据
+
+    **兼容性**:
+    - V1 Schema: 使用 `category` 字段
+    - V2 Schema: 自动匹配 `category_l1` 或 `category_l2`
     """
 
     try:
-        # 计算日期范围
-        end_date = datetime.now().date()
+        # 获取数据库中的最大业务日期
+        end_date = db_v2.get_max_date()
+        if not end_date:
+            raise HTTPException(status_code=500, detail="No data available in database")
+
         start_date = end_date - timedelta(days=days)
         prev_start_date = start_date - timedelta(days=days)
         prev_end_date = start_date - timedelta(days=1)
 
         # 构建查询
         where_clause = f"site = '{site}'"
-        if category:
-            where_clause += f" AND category = '{category}'"
+        where_clause += build_category_filter(category, db_v2)
 
         # 查询当前周期数据
         current_query = f"""
@@ -58,7 +110,7 @@ async def get_kpis(
               AND date <= '{end_date}'
         """
 
-        current_result = db.execute(current_query)
+        current_result = db_v2.execute(current_query)
         current_data = current_result[0] if current_result else (0, 0, 0, 0, 0)
 
         # 查询上一周期数据
@@ -75,7 +127,7 @@ async def get_kpis(
               AND date < '{start_date}'
         """
 
-        prev_result = db.execute(prev_query)
+        prev_result = db_v2.execute(prev_query)
         prev_data = prev_result[0] if prev_result else (0, 0, 0, 0, 0)
 
         # 计算变化百分比
@@ -128,7 +180,8 @@ async def get_kpis(
             site=site,
             category=category,
             days=days,
-            gmv=current_data[0]
+            gmv=current_data[0],
+            schema_version=db_v2._schema_version
         )
 
         return KPIResponse(
@@ -146,48 +199,52 @@ async def get_kpis(
 @router.get("/trends", response_model=TrendResponse)
 async def get_trends(
     site: str = Query("US", description="站点代码"),
-    category: Optional[str] = Query(None, description="品类（可选）"),
-    days: int = Query(30, description="天数", ge=7, le=90)
+    category: Optional[str] = Query(None, description="品类（可选，支持 L1 或 L2）"),
+    days: int = Query(30, description="天数", ge=7, le=730)
 ):
     """
     获取趋势数据
 
-    返回指定天数内的每日指标趋势
+    **兼容性**: 自动适配 V1/V2 Schema
     """
 
     try:
-        # 计算日期范围
-        end_date = datetime.now().date()
+        # 获取数据库中的最大业务日期
+        end_date = db_v2.get_max_date()
+        if not end_date:
+            raise HTTPException(status_code=500, detail="No data available in database")
+
         start_date = end_date - timedelta(days=days)
 
-        # 构建查询
         where_clause = f"site = '{site}'"
-        if category:
-            where_clause += f" AND category = '{category}'"
+        where_clause += build_category_filter(category, db_v2)
 
         query = f"""
             SELECT
                 date,
-                SUM(gmv) as daily_gmv,
-                SUM(sold_items) as daily_si,
-                AVG(ctr) as daily_ctr,
-                AVG(cvr) as daily_cvr
+                SUM(gmv) as gmv,
+                SUM(sold_items) as si,
+                AVG(ctr) as ctr,
+                AVG(cvr) as cvr,
+                SUM(gmv) / NULLIF(SUM(sold_items), 0) as asp,
+                SUM(sold_items) / NULLIF(SUM(live_listings), 0) as str_rate
             FROM daily_metrics
             WHERE {where_clause}
               AND date >= '{start_date}'
               AND date <= '{end_date}'
             GROUP BY date
-            ORDER BY date ASC
+            ORDER BY date
         """
 
-        results = db.execute(query)
+        results = db_v2.execute(query)
 
-        # 构建响应数据
         dates = []
         gmv = []
         sold_items = []
         ctr = []
         cvr = []
+        asp = []
+        str_rate = []
 
         for row in results:
             dates.append(str(row[0]))
@@ -195,6 +252,8 @@ async def get_trends(
             sold_items.append(int(row[2] or 0))
             ctr.append(float(row[3] or 0))
             cvr.append(float(row[4] or 0))
+            asp.append(float(row[5] or 0))
+            str_rate.append(float(row[6] or 0))
 
         logger.info(
             "trends_fetched",
@@ -209,7 +268,9 @@ async def get_trends(
             gmv=gmv,
             sold_items=sold_items,
             ctr=ctr,
-            cvr=cvr
+            cvr=cvr,
+            asp=asp,
+            str_rate=str_rate
         )
 
     except Exception as e:
@@ -220,155 +281,89 @@ async def get_trends(
 @router.get("/anomalies", response_model=AnomalyResponse)
 async def get_anomalies(
     site: Optional[str] = Query(None, description="站点代码（可选）"),
-    days: int = Query(7, description="检测天数", ge=1, le=30),
-    threshold: float = Query(0.15, description="异常阈值（默认15%）", ge=0.05, le=0.50)
+    days: int = Query(7, description="天数", ge=1, le=365),
+    threshold: float = Query(0.15, description="异常阈值", ge=0.05, le=0.5)
 ):
     """
-    检测异常指标
+    获取异常数据
 
-    使用简单的统计方法检测异常：
-    - 计算每个指标的历史平均值
-    - 标记偏离超过阈值的数据点
+    **兼容性**: 自动适配 V1/V2 Schema
     """
 
     try:
-        # 计算日期范围
-        end_date = datetime.now().date()
-        start_date = end_date - timedelta(days=days)
-        baseline_start = start_date - timedelta(days=30)  # 使用前30天作为基线
+        # 获取数据库中的最大业务日期
+        end_date = db_v2.get_max_date()
+        if not end_date:
+            raise HTTPException(status_code=500, detail="No data available in database")
 
-        # 构建 WHERE 子句
+        start_date = end_date - timedelta(days=days)
+
         where_clause = "1=1"
         if site:
-            where_clause = f"site = '{site}'"
+            where_clause += f" AND site = '{site}'"
 
-        # 查询基线数据（计算历史平均值）
-        baseline_query = f"""
-            SELECT
-                site,
-                category,
-                AVG(gmv) as avg_gmv,
-                AVG(ctr) as avg_ctr,
-                AVG(cvr) as avg_cvr
-            FROM daily_metrics
-            WHERE {where_clause}
-              AND date >= '{baseline_start}'
-              AND date < '{start_date}'
-            GROUP BY site, category
-        """
+        # 简单异常检测：GMV 环比变化超过阈值
+        if not db_v2.is_v2_schema():
+            # V1 Schema
+            category_field = "category"
+        else:
+            # V2 Schema
+            category_field = "category_l2"
 
-        baseline_results = db.execute(baseline_query)
-
-        # 构建基线字典
-        baselines = {}
-        for row in baseline_results:
-            key = (row[0], row[1])  # (site, category)
-            baselines[key] = {
-                'avg_gmv': float(row[2] or 0),
-                'avg_ctr': float(row[3] or 0),
-                'avg_cvr': float(row[4] or 0)
-            }
-
-        # 查询最近数据
-        recent_query = f"""
+        query = f"""
+            WITH current_period AS (
+                SELECT
+                    date,
+                    site,
+                    {category_field} as category,
+                    gmv,
+                    LAG(gmv) OVER (PARTITION BY site, {category_field} ORDER BY date) as prev_gmv
+                FROM daily_metrics
+                WHERE {where_clause}
+                  AND date >= '{start_date}'
+                  AND date <= '{end_date}'
+            )
             SELECT
                 date,
                 site,
                 category,
-                SUM(gmv) as gmv,
-                AVG(ctr) as ctr,
-                AVG(cvr) as cvr
-            FROM daily_metrics
-            WHERE {where_clause}
-              AND date >= '{start_date}'
-              AND date <= '{end_date}'
-            GROUP BY date, site, category
-            ORDER BY date DESC
+                prev_gmv as expected_value,
+                gmv as actual_value,
+                CASE
+                    WHEN prev_gmv > 0 THEN ((gmv - prev_gmv) / prev_gmv)
+                    ELSE 0
+                END as deviation
+            FROM current_period
+            WHERE prev_gmv > 0
+              AND ABS((gmv - prev_gmv) / prev_gmv) > {threshold}
+            ORDER BY ABS((gmv - prev_gmv) / prev_gmv) DESC
+            LIMIT 50
         """
 
-        recent_results = db.execute(recent_query)
+        results = db_v2.execute(query)
 
-        # 检测异常
         anomalies = []
+        for row in results:
+            deviation = float(row[5])
+            severity = "critical" if abs(deviation) > 0.3 else "high" if abs(deviation) > 0.2 else "medium"
 
-        for row in recent_results:
-            date_str = str(row[0])
-            site_val = row[1]
-            category_val = row[2]
-            gmv_val = float(row[3] or 0)
-            ctr_val = float(row[4] or 0)
-            cvr_val = float(row[5] or 0)
-
-            key = (site_val, category_val)
-
-            if key not in baselines:
-                continue
-
-            baseline = baselines[key]
-
-            # 检查 GMV 异常
-            if baseline['avg_gmv'] > 0:
-                gmv_deviation = (gmv_val - baseline['avg_gmv']) / baseline['avg_gmv']
-                if abs(gmv_deviation) > threshold:
-                    severity = "critical" if abs(gmv_deviation) > 0.3 else "high" if abs(gmv_deviation) > 0.2 else "medium"
-                    anomalies.append(Anomaly(
-                        date=date_str,
-                        metric="gmv",
-                        site=site_val,
-                        category=category_val,
-                        expected_value=baseline['avg_gmv'],
-                        actual_value=gmv_val,
-                        deviation_percent=gmv_deviation * 100,
-                        severity=severity
-                    ))
-
-            # 检查 CTR 异常
-            if baseline['avg_ctr'] > 0:
-                ctr_deviation = (ctr_val - baseline['avg_ctr']) / baseline['avg_ctr']
-                if abs(ctr_deviation) > threshold:
-                    severity = "high" if abs(ctr_deviation) > 0.25 else "medium"
-                    anomalies.append(Anomaly(
-                        date=date_str,
-                        metric="ctr",
-                        site=site_val,
-                        category=category_val,
-                        expected_value=baseline['avg_ctr'],
-                        actual_value=ctr_val,
-                        deviation_percent=ctr_deviation * 100,
-                        severity=severity
-                    ))
-
-            # 检查 CVR 异常
-            if baseline['avg_cvr'] > 0:
-                cvr_deviation = (cvr_val - baseline['avg_cvr']) / baseline['avg_cvr']
-                if abs(cvr_deviation) > threshold:
-                    severity = "high" if abs(cvr_deviation) > 0.25 else "medium"
-                    anomalies.append(Anomaly(
-                        date=date_str,
-                        metric="cvr",
-                        site=site_val,
-                        category=category_val,
-                        expected_value=baseline['avg_cvr'],
-                        actual_value=cvr_val,
-                        deviation_percent=cvr_deviation * 100,
-                        severity=severity
-                    ))
-
-        # 按严重程度和日期排序
-        anomalies.sort(key=lambda x: (
-            {"critical": 0, "high": 1, "medium": 2, "low": 3}.get(x.severity, 4),
-            x.date
-        ), reverse=True)
-
-        # 限制返回数量
-        anomalies = anomalies[:50]
+            anomalies.append(Anomaly(
+                date=str(row[0]),
+                metric="GMV",
+                site=row[1],
+                category=row[2],
+                expected_value=float(row[3] or 0),
+                actual_value=float(row[4] or 0),
+                deviation_percent=deviation * 100,
+                severity=severity
+            ))
 
         logger.info(
-            "anomalies_detected",
+            "anomalies_fetched",
             site=site,
             days=days,
             threshold=threshold,
-            anomaly_count=len(anomalies)
+            count=len(anomalies)
         )
 
         return AnomalyResponse(
@@ -377,5 +372,5 @@ async def get_anomalies(
         )
 
     except Exception as e:
-        logger.error("anomaly_detection_failed", error=str(e))
-        raise HTTPException(status_code=500, detail=f"Failed to detect anomalies: {str(e)}")
+        logger.error("anomalies_fetch_failed", error=str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to fetch anomalies: {str(e)}")

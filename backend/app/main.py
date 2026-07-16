@@ -12,7 +12,7 @@ import time
 from datetime import datetime
 
 from app.core.config import settings
-from app.core.database import db
+from app.core.database_v2 import db_v2 as db
 from app.core.llm import llm_client
 from app.models.schemas import HealthResponse, ErrorResponse
 
@@ -135,11 +135,11 @@ async def health_check():
 # API 路由
 # ============================================================
 
-from app.api import dashboard_router
+from app.api.dashboard_v2 import router as dashboard_v2_router
 from app.api.chat import router as chat_router
 
 # 注册 Dashboard 路由
-app.include_router(dashboard_router)
+app.include_router(dashboard_v2_router)
 
 # 注册 Chat 路由（Phase 2）
 app.include_router(chat_router)
