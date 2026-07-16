@@ -88,4 +88,4 @@ VSCODE_GIT_ASKPASS_NODE=E:\HEXY\Downloads\MicrosoftVSCode\Microsoft VS Code\Code
 VSCODE_GIT_ASKPASS_EXTRA_ARGS=
 VSCODE_GIT_ASKPASS_MAIN=c:\Users\HEXY\AppData\Roaming\Code\User\globalStorage\vscode.git\askpass\70789581cae28aa7\askpass-main.js
 VSCODE_GIT_IPC_HANDLE=\\.\pipe\vscode-git-efa113c0a2-sock
-VSCODE_NONCE=6c0afc3d-ed70-47ab-a915-4c4f724bc418
+VSCODE_NONCE=###
