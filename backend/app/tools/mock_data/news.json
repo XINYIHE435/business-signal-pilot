@@ -1,0 +1,45 @@
+{
+  "_description": "Mock market/competition news feed. Used by NewsTool to surface external events (competition hypothesis).",
+  "news": [
+    {
+      "news_id": "NEWS-2026-0712-01",
+      "date": "2026-07-08",
+      "site": "DE",
+      "category_l1": "Electronics",
+      "headline": "Amazon.de launches aggressive Prime Day electronics discounts",
+      "sentiment": "negative",
+      "relevance": "high",
+      "summary": "Amazon.de undercut consumer-electronics prices by up to 30% during Prime Day, drawing buyer traffic away from competing marketplaces including eBay."
+    },
+    {
+      "news_id": "NEWS-2026-0710-02",
+      "date": "2026-07-10",
+      "site": "DE",
+      "category_l1": "Electronics",
+      "headline": "MediaMarkt expands same-day delivery across Germany",
+      "sentiment": "negative",
+      "relevance": "medium",
+      "summary": "MediaMarkt's faster fulfillment improves its competitiveness in German electronics retail, pressuring third-party marketplace sellers."
+    },
+    {
+      "news_id": "NEWS-2026-0625-03",
+      "date": "2026-06-25",
+      "site": "US",
+      "category_l1": "Fashion",
+      "headline": "Fast-fashion import tariffs reduced in the US",
+      "sentiment": "positive",
+      "relevance": "medium",
+      "summary": "Lower tariffs cut landed costs for cross-border fashion sellers, supporting more competitive pricing and higher GMV."
+    },
+    {
+      "news_id": "NEWS-2026-0601-04",
+      "date": "2026-06-01",
+      "site": "ALL",
+      "category_l1": null,
+      "headline": "EU logistics carrier strike disrupts cross-border shipping",
+      "sentiment": "negative",
+      "relevance": "high",
+      "summary": "A multi-day carrier strike delayed cross-border deliveries into the EU, dampening conversion and increasing cancellations in early June."
+    }
+  ]
+}

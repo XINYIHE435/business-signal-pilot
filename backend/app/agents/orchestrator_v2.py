@@ -12,6 +12,12 @@ import structlog
 from langgraph.graph import StateGraph, END
 from app.agents.intent_classifier import intent_classifier_node
 from app.agents.sql_agent import sql_agent_node
+from app.agents.diagnosis_agent import (
+    hypothesis_generator_node,
+    tool_router_node,
+    evidence_collection_node,
+    reasoning_node,
+)
 
 logger = structlog.get_logger()
 
@@ -35,6 +41,13 @@ class AgentState(TypedDict):
 
     # 推理轨迹
     reasoning_trace: Annotated[List[Dict], operator.add]
+
+    # 诊断 Agent 相关（Phase 3）
+    analysis_mode: str            # "root_cause" | "comparison"
+    hypotheses: List[Dict]        # 生成的假设
+    selected_tools: List[str]     # Tool Router 选中的工具
+    evidence: List[Dict]          # 收集到的证据
+    diagnosis_report: Dict[str, Any]  # 最终诊断报告
 
     # 输出
     final_response: Dict[str, Any]
@@ -76,27 +89,30 @@ def synthesizer_node(state: Dict) -> Dict:
                 "message": "查询失败"
             }
 
-    elif intent == "root_cause_analysis":
-        # 根因分析（Phase 2 暂未实现）
+    elif intent in ("root_cause_analysis", "comparison_analysis"):
+        # 根因分析 / 对比分析（Phase 3 - Diagnosis Agent）
+        report = state.get("diagnosis_report", {})
         response = {
             "type": "diagnosis",
-            "success": True,
-            "message": "根因分析功能即将在 Phase 2 完成",
-            "note": "需要实现 Diagnosis Agent"
+            "success": report.get("success", False),
+            "analysis_mode": report.get("analysis_mode", "root_cause"),
+            "summary": report.get("summary", ""),
+            "hypotheses": state.get("hypotheses", []),
+            "root_causes": report.get("root_causes", []),
+            "contributions": report.get("contributions", []),
+            "recommended_actions": report.get("recommended_actions", []),
+            "evidence": report.get("evidence", state.get("evidence", [])),
+            "comparison": report.get("comparison"),
+            "message": report.get("summary", "诊断完成"),
         }
+        if not report.get("success", False) and report.get("error"):
+            response["error"] = report["error"]
 
     elif intent == "report_generation":
         response = {
             "type": "report",
             "success": True,
-            "message": "报告生成功能将在 Phase 2 实现"
-        }
-
-    elif intent == "comparison_analysis":
-        response = {
-            "type": "comparison",
-            "success": True,
-            "message": "对比分析功能将在 Phase 2 实现"
+            "message": "报告生成功能将在后续阶段实现"
         }
 
     else:
@@ -131,6 +147,13 @@ def create_orchestrator_v2() -> StateGraph:
     # 添加节点
     workflow.add_node("intent_classifier", intent_classifier_node)
     workflow.add_node("sql_agent", sql_agent_node)
+
+    # Diagnosis Agent 节点组（Phase 3）
+    workflow.add_node("hypothesis_generator", hypothesis_generator_node)
+    workflow.add_node("tool_router", tool_router_node)
+    workflow.add_node("evidence_collection", evidence_collection_node)
+    workflow.add_node("reasoning", reasoning_node)
+
     workflow.add_node("synthesizer", synthesizer_node)
 
     # 设置入口
@@ -143,9 +166,9 @@ def create_orchestrator_v2() -> StateGraph:
 
         if intent == "data_query":
             return "sql_agent"
-        elif intent == "root_cause_analysis":
-            # TODO: Phase 2 后期添加 diagnosis_agent
-            return "synthesizer"
+        elif intent in ("root_cause_analysis", "comparison_analysis"):
+            # Diagnosis Agent 入口
+            return "hypothesis_generator"
         else:
             return "synthesizer"
 
@@ -154,12 +177,20 @@ def create_orchestrator_v2() -> StateGraph:
         route_by_intent,
         {
             "sql_agent": "sql_agent",
+            "hypothesis_generator": "hypothesis_generator",
             "synthesizer": "synthesizer"
         }
     )
 
-    # 其他路径
+    # SQL 查询路径
     workflow.add_edge("sql_agent", "synthesizer")
+
+    # 诊断路径：hypothesis → tool_router → evidence → reasoning → synthesizer
+    workflow.add_edge("hypothesis_generator", "tool_router")
+    workflow.add_edge("tool_router", "evidence_collection")
+    workflow.add_edge("evidence_collection", "reasoning")
+    workflow.add_edge("reasoning", "synthesizer")
+
     workflow.add_edge("synthesizer", END)
 
     logger.info("orchestrator_v2_created")
@@ -213,6 +244,11 @@ async def run_query(
         "tool_calls": [],
         "tool_results": [],
         "reasoning_trace": [],
+        "analysis_mode": "",
+        "hypotheses": [],
+        "selected_tools": [],
+        "evidence": [],
+        "diagnosis_report": {},
         "final_response": {},
         "should_end": False
     }

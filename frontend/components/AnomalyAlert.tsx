@@ -7,9 +7,11 @@ import { Anomaly } from '@/lib/api'
 
 interface AnomalyAlertProps {
   anomalies: Anomaly[]
+  /** 点击某条异常时触发诊断（可选） */
+  onDiagnose?: (anomaly: Anomaly) => void
 }
 
-export function AnomalyAlert({ anomalies }: AnomalyAlertProps) {
+export function AnomalyAlert({ anomalies, onDiagnose }: AnomalyAlertProps) {
   if (anomalies.length === 0) {
     return (
       <div className="bg-green-50 border border-green-200 rounded-lg p-4">
@@ -40,10 +42,27 @@ export function AnomalyAlert({ anomalies }: AnomalyAlertProps) {
             low: 'bg-blue-50 border-blue-200 text-blue-800',
           }[anomaly.severity]
 
+          const clickable = Boolean(onDiagnose)
+
           return (
             <div
               key={index}
-              className={`${colorClass} border rounded-lg p-3`}
+              onClick={clickable ? () => onDiagnose!(anomaly) : undefined}
+              role={clickable ? 'button' : undefined}
+              tabIndex={clickable ? 0 : undefined}
+              onKeyDown={
+                clickable
+                  ? (e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        onDiagnose!(anomaly)
+                      }
+                    }
+                  : undefined
+              }
+              className={`${colorClass} border rounded-lg p-3 ${
+                clickable ? 'cursor-pointer hover:shadow-md transition-shadow' : ''
+              }`}
             >
               <div className="flex items-start gap-3">
                 <Icon className="h-5 w-5 mt-0.5 flex-shrink-0" />
@@ -68,6 +87,11 @@ export function AnomalyAlert({ anomalies }: AnomalyAlertProps) {
                     Actual: {anomaly.actual_value.toFixed(0)} |
                     Date: {anomaly.date}
                   </p>
+                  {clickable && (
+                    <p className="text-xs mt-2 font-medium opacity-90">
+                      点击进行 AI 根因诊断 →
+                    </p>
+                  )}
                 </div>
               </div>
             </div>

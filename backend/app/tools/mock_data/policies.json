@@ -1,0 +1,49 @@
+{
+  "_description": "Mock platform policy changes. Used by PolicyTool to check whether a policy shift could explain a metric change.",
+  "policies": [
+    {
+      "policy_id": "POL-2026-014",
+      "title": "Electronics authenticity verification tightened (DE/UK)",
+      "site": "DE",
+      "category_l1": "Electronics",
+      "effective_date": "2026-07-05",
+      "type": "listing_restriction",
+      "impact": "high",
+      "effect": "negative",
+      "summary": "New authenticity checks require sellers to submit invoices for high-value Electronics. Many listings were temporarily delisted, reducing live listings and GMV."
+    },
+    {
+      "policy_id": "POL-2026-011",
+      "title": "Seller fee restructure for cross-border",
+      "site": "ALL",
+      "category_l1": null,
+      "effective_date": "2026-06-15",
+      "type": "fee_change",
+      "impact": "medium",
+      "effect": "negative",
+      "summary": "Final value fee increased by 1.2% for cross-border transactions, prompting some sellers to reduce listings or raise prices."
+    },
+    {
+      "policy_id": "POL-2026-009",
+      "title": "Promoted Listings ad rate cap raised",
+      "site": "US",
+      "category_l1": null,
+      "effective_date": "2026-05-20",
+      "type": "advertising",
+      "impact": "medium",
+      "effect": "positive",
+      "summary": "Higher ad rate ceiling let top sellers bid more aggressively, increasing traffic to promoted Electronics and Fashion listings."
+    },
+    {
+      "policy_id": "POL-2026-004",
+      "title": "Returns window extended to 60 days",
+      "site": "ALL",
+      "category_l1": null,
+      "effective_date": "2026-03-01",
+      "type": "buyer_protection",
+      "impact": "low",
+      "effect": "positive",
+      "summary": "Longer returns window modestly improved conversion rate across categories."
+    }
+  ]
+}

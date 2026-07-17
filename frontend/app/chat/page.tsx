@@ -7,7 +7,8 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { chatAPI, type Message, type ChatQueryResponse } from '@/lib/api'
+import { chatAPI, type Message, type ChatQueryResponse, type DiagnosisReport as DiagnosisReportData } from '@/lib/api'
+import { DiagnosisReport } from '@/components/DiagnosisReport'
 import { Send, Bot, User, Loader2, AlertCircle, Database, Brain, CheckCircle } from 'lucide-react'
 
 interface ChatMessage extends Message {
@@ -86,7 +87,16 @@ export default function ChatPage() {
   }
 
   const formatResponse = (response: ChatQueryResponse): string => {
-    const { intent, response: responseData } = response
+    const { response: responseData } = response
+    const data = responseData as Record<string, unknown>
+
+    // 诊断类响应：正文由 DiagnosisReport 组件渲染，这里给一句引导语
+    if (data.type === 'diagnosis') {
+      if (!responseData.success) {
+        return `诊断失败：${(data.error as string) || '未知错误'}`
+      }
+      return (data.summary as string) || '诊断完成。'
+    }
 
     if (!responseData.success) {
       return `查询失败：${responseData.error || '未知错误'}`
@@ -104,6 +114,24 @@ export default function ChatPage() {
     }
 
     return text || '查询完成。'
+  }
+
+  /** 从 chat 响应中提取诊断报告（若为诊断类响应） */
+  const extractDiagnosis = (response?: ChatQueryResponse): DiagnosisReportData | null => {
+    if (!response) return null
+    const data = response.response as Record<string, unknown>
+    if (data.type !== 'diagnosis') return null
+    return {
+      success: Boolean(data.success),
+      analysis_mode: (data.analysis_mode as 'root_cause' | 'comparison') || 'root_cause',
+      summary: (data.summary as string) || '',
+      hypotheses: (data.hypotheses as DiagnosisReportData['hypotheses']) || [],
+      root_causes: (data.root_causes as DiagnosisReportData['root_causes']) || [],
+      contributions: (data.contributions as DiagnosisReportData['contributions']) || [],
+      recommended_actions: (data.recommended_actions as string[]) || [],
+      comparison: (data.comparison as DiagnosisReportData['comparison']) ?? null,
+      error: data.error as string | undefined,
+    }
   }
 
   return (
@@ -213,6 +241,13 @@ export default function ChatPage() {
                               </span>
                             )}
                           </div>
+
+                          {/* Diagnosis Report（根因/对比分析） */}
+                          {extractDiagnosis(message.response) && (
+                            <div className="mb-3">
+                              <DiagnosisReport report={extractDiagnosis(message.response)} compact />
+                            </div>
+                          )}
 
                           {/* SQL */}
                           {message.response.response.sql && (

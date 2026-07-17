@@ -8,12 +8,13 @@
 
 import { useState } from 'react'
 import useSWR from 'swr'
-import { dashboardAPI } from '@/lib/api'
+import { dashboardAPI, diagnosisAPI, type Anomaly, type DiagnosisReport as DiagnosisReportData } from '@/lib/api'
 import { KPICard } from '@/components/KPICard'
 import { MultiTrendChart } from '@/components/MultiTrendChart'
 import { AnomalyAlert } from '@/components/AnomalyAlert'
 import { CategoryFilter } from '@/components/CategoryFilter'
-import { RefreshCw, AlertCircle, MessageSquare } from 'lucide-react'
+import { DiagnosisReport } from '@/components/DiagnosisReport'
+import { RefreshCw, AlertCircle, MessageSquare, X } from 'lucide-react'
 
 const SITES = ['US', 'DE', 'UK', 'AU', 'FR', 'IT', 'ES', 'CA', 'CN', 'JP']
 
@@ -31,6 +32,35 @@ export default function DashboardPage() {
   const [site, setSite] = useState('DE')
   const [days, setDays] = useState(7)
   const [category, setCategory] = useState<{ l1?: string; l2?: string }>({})
+
+  // 诊断 Modal 状态
+  const [diagnosisOpen, setDiagnosisOpen] = useState(false)
+  const [diagnosisLoading, setDiagnosisLoading] = useState(false)
+  const [diagnosisError, setDiagnosisError] = useState<string | undefined>()
+  const [diagnosisReport, setDiagnosisReport] = useState<DiagnosisReportData | null>(null)
+  const [diagnosisContext, setDiagnosisContext] = useState<Anomaly | null>(null)
+
+  const handleDiagnose = async (anomaly: Anomaly) => {
+    setDiagnosisContext(anomaly)
+    setDiagnosisReport(null)
+    setDiagnosisError(undefined)
+    setDiagnosisOpen(true)
+    setDiagnosisLoading(true)
+    try {
+      const report = await diagnosisAPI.analyze({
+        metric: anomaly.metric.toLowerCase(),
+        site: anomaly.site,
+        category: anomaly.category,
+        date: anomaly.date,
+        mode: 'root_cause',
+      })
+      setDiagnosisReport(report)
+    } catch (err) {
+      setDiagnosisError(err instanceof Error ? err.message : '未知错误')
+    } finally {
+      setDiagnosisLoading(false)
+    }
+  }
 
   // 获取 KPI 数据
   const { data: kpiData, error: kpiError, isLoading: kpiLoading, mutate: refetchKPI } = useSWR(
@@ -234,10 +264,50 @@ export default function DashboardPage() {
         {/* Anomalies */}
         {anomalyData && (
           <div>
-            <AnomalyAlert anomalies={anomalyData.anomalies} />
+            <AnomalyAlert anomalies={anomalyData.anomalies} onDiagnose={handleDiagnose} />
           </div>
         )}
       </main>
+
+      {/* Diagnosis Modal */}
+      {diagnosisOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => setDiagnosisOpen(false)}
+        >
+          <div
+            className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[85vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 sticky top-0 bg-white">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">AI 根因诊断</h3>
+                {diagnosisContext && (
+                  <p className="text-sm text-gray-500 mt-0.5">
+                    {diagnosisContext.site} · {diagnosisContext.category} · {diagnosisContext.metric.toUpperCase()}{' '}
+                    {diagnosisContext.deviation_percent > 0 ? '+' : ''}
+                    {diagnosisContext.deviation_percent.toFixed(1)}% · {diagnosisContext.date}
+                  </p>
+                )}
+              </div>
+              <button
+                onClick={() => setDiagnosisOpen(false)}
+                className="text-gray-400 hover:text-gray-600"
+                aria-label="关闭"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="px-6 py-5">
+              <DiagnosisReport
+                report={diagnosisReport}
+                isLoading={diagnosisLoading}
+                error={diagnosisError}
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Footer */}
       <footer className="bg-white border-t border-gray-200 mt-12">
