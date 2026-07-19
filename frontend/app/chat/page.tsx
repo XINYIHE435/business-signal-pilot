@@ -7,9 +7,10 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { chatAPI, type Message, type ChatQueryResponse, type DiagnosisReport as DiagnosisReportData } from '@/lib/api'
+import { chatAPI, exportAPI, type Message, type ChatQueryResponse, type DiagnosisReport as DiagnosisReportData, type ExecutiveSummary } from '@/lib/api'
 import { DiagnosisReport } from '@/components/DiagnosisReport'
-import { Send, Bot, User, Loader2, AlertCircle, Database, Brain, CheckCircle } from 'lucide-react'
+import { ReportView } from '@/components/ReportView'
+import { Send, Bot, User, Loader2, AlertCircle, Database, Brain, CheckCircle, Download, FileText } from 'lucide-react'
 
 interface ChatMessage extends Message {
   response?: ChatQueryResponse
@@ -21,6 +22,7 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [exportingIndex, setExportingIndex] = useState<number | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   const scrollToBottom = () => {
@@ -30,6 +32,84 @@ export default function ChatPage() {
   useEffect(() => {
     scrollToBottom()
   }, [messages])
+
+  // 导出查询结果
+  const handleExportQueryResult = async (data: Array<Record<string, any>>, format: 'csv' | 'markdown', messageIndex: number) => {
+    setExportingIndex(messageIndex)
+    try {
+      const { blob, filename } = await exportAPI.exportQueryResult({ data, format })
+
+      // 触发下载
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(url)
+    } catch (error) {
+      alert(`导出失败: ${error instanceof Error ? error.message : '未知错误'}`)
+    } finally {
+      setExportingIndex(null)
+    }
+  }
+
+  // 导出诊断报告
+  const handleExportDiagnosis = async (diagnosis: DiagnosisReportData, format: 'markdown' | 'pdf', messageIndex: number) => {
+    setExportingIndex(messageIndex)
+    try {
+      const { blob, filename } = await exportAPI.exportDiagnosis({
+        diagnosis_report: diagnosis as any,
+        format
+      })
+
+      // 触发下载
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(url)
+    } catch (error) {
+      alert(`导出失败: ${error instanceof Error ? error.message : '未知错误'}`)
+    } finally {
+      setExportingIndex(null)
+    }
+  }
+
+  // 导出业务报告
+  const handleExportReport = async (response: ChatQueryResponse, format: 'markdown' | 'pdf', messageIndex: number) => {
+    setExportingIndex(messageIndex)
+    try {
+      const r = response.response
+      const report_content = {
+        report_type: r.report_type || 'weekly',
+        start_date: r.start_date || '',
+        end_date: r.end_date || '',
+        executive_summary: r.executive_summary || {},
+        generated_at: r.generated_at || '',
+        data_sources: r.data_sources || {},
+      }
+      const { blob, filename } = await exportAPI.exportReport({ report_content, format })
+
+      // 触发下载
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(url)
+    } catch (error) {
+      alert(`导出失败: ${error instanceof Error ? error.message : '未知错误'}`)
+    } finally {
+      setExportingIndex(null)
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -98,6 +178,20 @@ export default function ChatPage() {
       return (data.summary as string) || '诊断完成。'
     }
 
+    // 报告类响应：正文由 ReportView 组件渲染，这里给一句引导语
+    if (data.type === 'report') {
+      if (!responseData.success) {
+        return `报告生成失败：${(data.error as string) || '未知错误'}`
+      }
+      const label = data.report_type === 'monthly' ? '月报' : data.report_type === 'quarterly' ? '季报' : '周报'
+      return `已为你生成业务${label}，详见下方 Executive Summary。`
+    }
+
+    // 参数缺失：Parameter Validation 暂停 Workflow，向用户追问缺失的报告参数
+    if (data.type === 'clarification_needed') {
+      return (data.question as string) || '请补充生成报告所需的参数。'
+    }
+
     if (!responseData.success) {
       return `查询失败：${responseData.error || '未知错误'}`
     }
@@ -132,6 +226,16 @@ export default function ChatPage() {
       comparison: (data.comparison as DiagnosisReportData['comparison']) ?? null,
       error: data.error as string | undefined,
     }
+  }
+
+  /** 从 chat 响应中提取业务报告（若为报告类响应且成功） */
+  const extractReport = (response?: ChatQueryResponse): ExecutiveSummary | null => {
+    if (!response) return null
+    const data = response.response as Record<string, unknown>
+    if (data.type !== 'report' || !data.success) return null
+    const summary = data.executive_summary as ExecutiveSummary | undefined
+    if (!summary || Object.keys(summary).length === 0) return null
+    return summary
   }
 
   return (
@@ -245,7 +349,81 @@ export default function ChatPage() {
                           {/* Diagnosis Report（根因/对比分析） */}
                           {extractDiagnosis(message.response) && (
                             <div className="mb-3">
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="text-xs font-medium text-gray-700">诊断报告</span>
+                                <div className="flex gap-1">
+                                  <button
+                                    onClick={() => handleExportDiagnosis(extractDiagnosis(message.response)!, 'markdown', index)}
+                                    disabled={exportingIndex === index}
+                                    className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded flex items-center gap-1 disabled:opacity-50"
+                                  >
+                                    {exportingIndex === index ? (
+                                      <Loader2 className="h-3 w-3 animate-spin" />
+                                    ) : (
+                                      <Download className="h-3 w-3" />
+                                    )}
+                                    Markdown
+                                  </button>
+                                  <button
+                                    onClick={() => handleExportDiagnosis(extractDiagnosis(message.response)!, 'pdf', index)}
+                                    disabled={exportingIndex === index}
+                                    className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded flex items-center gap-1 disabled:opacity-50"
+                                  >
+                                    {exportingIndex === index ? (
+                                      <Loader2 className="h-3 w-3 animate-spin" />
+                                    ) : (
+                                      <Download className="h-3 w-3" />
+                                    )}
+                                    PDF
+                                  </button>
+                                </div>
+                              </div>
                               <DiagnosisReport report={extractDiagnosis(message.response)} compact />
+                            </div>
+                          )}
+
+                          {/* Report（业务周报/月报 Executive Summary） */}
+                          {extractReport(message.response) && (
+                            <div className="mb-3">
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="flex items-center gap-1 text-xs font-medium text-gray-700">
+                                  <FileText className="h-3 w-3" />
+                                  业务报告
+                                </span>
+                                <div className="flex gap-1">
+                                  <button
+                                    onClick={() => handleExportReport(message.response!, 'markdown', index)}
+                                    disabled={exportingIndex === index}
+                                    className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded flex items-center gap-1 disabled:opacity-50"
+                                  >
+                                    {exportingIndex === index ? (
+                                      <Loader2 className="h-3 w-3 animate-spin" />
+                                    ) : (
+                                      <Download className="h-3 w-3" />
+                                    )}
+                                    Markdown
+                                  </button>
+                                  <button
+                                    onClick={() => handleExportReport(message.response!, 'pdf', index)}
+                                    disabled={exportingIndex === index}
+                                    className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded flex items-center gap-1 disabled:opacity-50"
+                                  >
+                                    {exportingIndex === index ? (
+                                      <Loader2 className="h-3 w-3 animate-spin" />
+                                    ) : (
+                                      <Download className="h-3 w-3" />
+                                    )}
+                                    PDF
+                                  </button>
+                                </div>
+                              </div>
+                              <ReportView
+                                summary={extractReport(message.response)}
+                                reportType={message.response.response.report_type}
+                                startDate={message.response.response.start_date}
+                                endDate={message.response.response.end_date}
+                                compact
+                              />
                             </div>
                           )}
 
@@ -265,9 +443,37 @@ export default function ChatPage() {
                           {/* Data */}
                           {message.response.response.data && message.response.response.data.length > 0 && (
                             <div>
-                              <div className="flex items-center gap-2 text-xs font-medium text-gray-700 mb-2">
-                                <CheckCircle className="h-3 w-3" />
-                                查询结果 ({message.response.response.row_count || message.response.response.data.length} 行)
+                              <div className="flex items-center justify-between mb-2">
+                                <div className="flex items-center gap-2 text-xs font-medium text-gray-700">
+                                  <CheckCircle className="h-3 w-3" />
+                                  查询结果 ({message.response.response.row_count || message.response.response.data.length} 行)
+                                </div>
+                                <div className="flex gap-1">
+                                  <button
+                                    onClick={() => handleExportQueryResult(message.response!.response.data!, 'csv', index)}
+                                    disabled={exportingIndex === index}
+                                    className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded flex items-center gap-1 disabled:opacity-50"
+                                  >
+                                    {exportingIndex === index ? (
+                                      <Loader2 className="h-3 w-3 animate-spin" />
+                                    ) : (
+                                      <Download className="h-3 w-3" />
+                                    )}
+                                    CSV
+                                  </button>
+                                  <button
+                                    onClick={() => handleExportQueryResult(message.response!.response.data!, 'markdown', index)}
+                                    disabled={exportingIndex === index}
+                                    className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded flex items-center gap-1 disabled:opacity-50"
+                                  >
+                                    {exportingIndex === index ? (
+                                      <Loader2 className="h-3 w-3 animate-spin" />
+                                    ) : (
+                                      <Download className="h-3 w-3" />
+                                    )}
+                                    Markdown
+                                  </button>
+                                </div>
                               </div>
                               <div className="overflow-x-auto">
                                 <table className="min-w-full text-xs">

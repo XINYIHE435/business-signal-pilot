@@ -5,7 +5,8 @@ Dashboard API 路由 V2
 """
 
 from fastapi import APIRouter, HTTPException, Query
-from typing import Optional
+from pydantic import BaseModel
+from typing import Optional, Dict, Any
 from datetime import datetime, timedelta
 import structlog
 
@@ -15,6 +16,21 @@ from app.models.schemas import KPIResponse, KPICard, TrendResponse, AnomalyRespo
 logger = structlog.get_logger()
 
 router = APIRouter(prefix="/api/v1/dashboard", tags=["Dashboard"])
+
+
+class DashboardReportRequest(BaseModel):
+    """Dashboard 报告生成请求 —— 参数视为完整可信，跳过 Parameter Validation"""
+    site: str
+    start_date: str
+    end_date: str
+    category: Optional[str] = None
+    report_type: Optional[str] = None
+
+
+class DashboardReportResponse(BaseModel):
+    """Dashboard 报告生成响应，与 Chat 报告响应结构一致"""
+    success: bool
+    response: Dict[str, Any]
 
 
 @router.get("/business-date")
@@ -374,3 +390,32 @@ async def get_anomalies(
     except Exception as e:
         logger.error("anomalies_fetch_failed", error=str(e))
         raise HTTPException(status_code=500, detail=f"Failed to fetch anomalies: {str(e)}")
+
+
+@router.post("/report", response_model=DashboardReportResponse)
+async def generate_dashboard_report(request: DashboardReportRequest):
+    """
+    Dashboard 报告生成入口
+
+    与 Chat 报告生成（/api/v1/chat/query，intent=report_generation）共用同一套
+    ReportRequest 结构和 Report Agent 逻辑（见 orchestrator_v2.run_dashboard_report），
+    唯一区别：Dashboard 传入的 site/start_date/end_date 视为完整可信参数，
+    直接跳过 Parameter Validation，不会触发澄清询问。
+    """
+    from app.agents.orchestrator_v2 import run_dashboard_report
+
+    try:
+        result = await run_dashboard_report(
+            site=request.site,
+            start_date=request.start_date,
+            end_date=request.end_date,
+            category=request.category or "",
+            report_type=request.report_type,
+        )
+        return DashboardReportResponse(
+            success=result["response"].get("success", False),
+            response=result["response"],
+        )
+    except Exception as e:
+        logger.error("dashboard_report_endpoint_failed", error=str(e))
+        raise HTTPException(status_code=500, detail=f"Report generation failed: {str(e)}")

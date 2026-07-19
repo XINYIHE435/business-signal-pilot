@@ -52,11 +52,21 @@ async def test_diagnosis_query():
 
 @pytest.mark.asyncio
 async def test_report_query():
-    """测试报告生成查询"""
-    result = await run_query("生成本周业务报告")
+    """测试报告生成查询（site + 时间范围均已指定，应直接生成报告）"""
+    result = await run_query("生成美国站本周业务报告")
 
     assert result["intent"] == "report_generation"
     assert result["response"]["type"] == "report"
+
+
+@pytest.mark.asyncio
+async def test_report_query_missing_site_asks_clarification():
+    """测试报告生成缺少 site 时，应暂停并询问用户，而非默认站点"""
+    result = await run_query("生成本周业务报告")
+
+    assert result["intent"] == "report_generation"
+    assert result["response"]["type"] == "clarification_needed"
+    assert "site" in result["response"]["missing_params"]
 
 
 @pytest.mark.asyncio

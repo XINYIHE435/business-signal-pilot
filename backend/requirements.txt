@@ -21,5 +21,13 @@ langchain-anthropic>=0.3.0,<0.4.0
 chromadb==0.5.18
 sentence-transformers==3.2.1
 
+# === Phase 4: Export Layer ===
+markdown==3.7
+# PDF 渲染引擎（按优先级回退）：
+#   weasyprint 排版最佳，但依赖系统级 GTK/Pango/Cairo（Linux/Docker 友好，Windows 需额外安装 GTK 运行时）
+#   fpdf2 为纯 Python 后备引擎，无系统依赖，保证 Windows 等环境也能导出中文 PDF
+weasyprint==62.3
+fpdf2==2.8.7
+
 # === Phase 4: Observability (Optional) ===
 # langsmith==0.2.0

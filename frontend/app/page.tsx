@@ -14,7 +14,8 @@ import { MultiTrendChart } from '@/components/MultiTrendChart'
 import { AnomalyAlert } from '@/components/AnomalyAlert'
 import { CategoryFilter } from '@/components/CategoryFilter'
 import { DiagnosisReport } from '@/components/DiagnosisReport'
-import { RefreshCw, AlertCircle, MessageSquare, X } from 'lucide-react'
+import { ReportView } from '@/components/ReportView'
+import { RefreshCw, AlertCircle, MessageSquare, X, FileText, Download } from 'lucide-react'
 
 const SITES = ['US', 'DE', 'UK', 'AU', 'FR', 'IT', 'ES', 'CA', 'CN', 'JP']
 
@@ -40,6 +41,14 @@ export default function DashboardPage() {
   const [diagnosisReport, setDiagnosisReport] = useState<DiagnosisReportData | null>(null)
   const [diagnosisContext, setDiagnosisContext] = useState<Anomaly | null>(null)
 
+  // Report Modal 状态
+  const [reportModalOpen, setReportModalOpen] = useState(false)
+  const [reportLoading, setReportLoading] = useState(false)
+  const [reportYear, setReportYear] = useState(new Date().getFullYear())
+  const [reportMonth, setReportMonth] = useState(new Date().getMonth() + 1)
+  const [reportData, setReportData] = useState<any>(null)
+  const [reportError, setReportError] = useState<string | null>(null)
+
   const handleDiagnose = async (anomaly: Anomaly) => {
     setDiagnosisContext(anomaly)
     setDiagnosisReport(null)
@@ -60,6 +69,62 @@ export default function DashboardPage() {
     } finally {
       setDiagnosisLoading(false)
     }
+  }
+
+  const handleGenerateReport = async () => {
+    setReportLoading(true)
+    setReportError(null)
+    try {
+      const startDate = `${reportYear}-${String(reportMonth).padStart(2, '0')}-01`
+      const lastDay = new Date(reportYear, reportMonth, 0).getDate()
+      const endDate = `${reportYear}-${String(reportMonth).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+
+      const result = await dashboardAPI.generateReport({
+        site,
+        start_date: startDate,
+        end_date: endDate,
+        category: category.l2 || category.l1 || undefined,
+        report_type: 'monthly'
+      })
+
+      if (result.success && result.response.executive_summary) {
+        setReportData(result.response)
+      } else {
+        setReportError(result.response.error || result.response.message || '报告生成失败')
+      }
+    } catch (err) {
+      setReportError(err instanceof Error ? err.message : '未知错误')
+    } finally {
+      setReportLoading(false)
+    }
+  }
+
+  const handleDownloadMarkdown = () => {
+    if (!reportData?.executive_summary) return
+
+    const summary = reportData.executive_summary
+    let markdown = `# 业务月报\n\n`
+    markdown += `**站点**: ${site}\n`
+    markdown += `**时间范围**: ${reportData.start_date} ~ ${reportData.end_date}\n\n`
+
+    if (summary.overview) markdown += `## 概览\n${summary.overview}\n\n`
+    if (summary.key_findings?.length) {
+      markdown += `## 关键发现\n${summary.key_findings.map((f: string) => `- ${f}`).join('\n')}\n\n`
+    }
+    if (summary.trends?.length) {
+      markdown += `## 趋势\n${summary.trends.map((t: string) => `- ${t}`).join('\n')}\n\n`
+    }
+    if (summary.recommendations?.length) {
+      markdown += `## 建议\n${summary.recommendations.map((r: string) => `- ${r}`).join('\n')}\n\n`
+    }
+
+    const blob = new Blob([markdown], { type: 'text/markdown' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `report_${site}_${reportData.start_date}.md`
+    a.click()
+    URL.revokeObjectURL(url)
   }
 
   // 获取 KPI 数据
@@ -113,6 +178,13 @@ export default function DashboardPage() {
             </div>
 
             <div className="flex items-center gap-3">
+              <button
+                onClick={() => setReportModalOpen(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+              >
+                <FileText className="h-4 w-4" />
+                Export Report
+              </button>
               <a
                 href="/chat"
                 className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
@@ -272,7 +344,7 @@ export default function DashboardPage() {
       {/* Diagnosis Modal */}
       {diagnosisOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-white/30 backdrop-blur-sm p-4"
           onClick={() => setDiagnosisOpen(false)}
         >
           <div
@@ -304,6 +376,117 @@ export default function DashboardPage() {
                 isLoading={diagnosisLoading}
                 error={diagnosisError}
               />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Report Modal */}
+      {reportModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-white/30 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-semibold text-gray-900">Export Business Report</h2>
+                <p className="text-sm text-gray-500 mt-1">生成业务月报</p>
+              </div>
+              <button
+                onClick={() => {
+                  setReportModalOpen(false)
+                  setReportData(null)
+                  setReportError(null)
+                }}
+                className="text-gray-400 hover:text-gray-600"
+                aria-label="关闭"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="px-6 py-5">
+              {!reportData ? (
+                <div className="space-y-4">
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <p className="text-sm text-blue-800">
+                      <strong>当前筛选条件：</strong> {site} 站点
+                      {(category.l2 || category.l1) && ` · ${category.l2 || category.l1}`}
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Year</label>
+                      <select
+                        value={reportYear}
+                        onChange={(e) => setReportYear(Number(e.target.value))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      >
+                        {[2024, 2025, 2026].map(y => (
+                          <option key={y} value={y}>{y}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Month</label>
+                      <select
+                        value={reportMonth}
+                        onChange={(e) => setReportMonth(Number(e.target.value))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      >
+                        {Array.from({length: 12}, (_, i) => i + 1).map(m => (
+                          <option key={m} value={m}>{m}月</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {reportError && (
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                      <p className="text-sm text-red-800">{reportError}</p>
+                    </div>
+                  )}
+
+                  <button
+                    onClick={handleGenerateReport}
+                    disabled={reportLoading}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {reportLoading ? (
+                      <>
+                        <RefreshCw className="h-4 w-4 animate-spin" />
+                        生成中...
+                      </>
+                    ) : (
+                      <>
+                        <FileText className="h-4 w-4" />
+                        生成月报
+                      </>
+                    )}
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between pb-4 border-b border-gray-200">
+                    <h3 className="text-lg font-semibold text-gray-900">报告预览</h3>
+                    <button
+                      onClick={handleDownloadMarkdown}
+                      className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                    >
+                      <Download className="h-4 w-4" />
+                      Download Markdown
+                    </button>
+                  </div>
+
+                  <ReportView
+                    reportType={reportData.report_type}
+                    startDate={reportData.start_date}
+                    endDate={reportData.end_date}
+                    summary={reportData.executive_summary}
+                    compact={false}
+                  />
+                </div>
+              )}
             </div>
           </div>
         </div>

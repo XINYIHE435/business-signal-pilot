@@ -64,8 +64,12 @@ class IntentClassifierAgent:
                                 "description": "Product category"
                             },
                             "date_range": {
-                                "type": "string",
-                                "description": "Date range (e.g., 'last 7 days', '2024-01-01 to 2024-01-31')"
+                                "type": "object",
+                                "properties": {
+                                    "start": {"type": "string"},
+                                    "end": {"type": "string"}
+                                },
+                                "description": "Date range with start and end dates"
                             },
                             "comparison": {
                                 "type": "string",
@@ -74,6 +78,11 @@ class IntentClassifierAgent:
                             "threshold": {
                                 "type": "number",
                                 "description": "Threshold for anomaly detection"
+                            },
+                            "report_type": {
+                                "type": "string",
+                                "enum": ["weekly", "monthly"],
+                                "description": "Report type for report_generation intent"
                             }
                         },
                         "description": "Extracted entities from query"

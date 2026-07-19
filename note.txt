@@ -1,0 +1,45 @@
+Phase 3 架构已经基本达标（约 90% 完成），现在暴露的问题主要不是 LangGraph、Function Calling 或 Reasoning，而是 Mock 数据生态不够丰富：
+campaigns 覆盖率不足；
+seller_daily_metrics、inventory_daily 等新表与 daily_metrics 的关联覆盖不完整；
+holidays.json、policies.json、news.json 只有少量事件，很多站点和日期查不到；
+Tool 查询条件可能还需要放宽（例如按活动时间区间匹配，而不是只匹配单日）。
+
+## 我建议不要为了追求"100分"继续修改 Phase 3。
+因为你后面还有 **Phase 4（Report Agent）** 和 **Phase 5（Enterprise Integration）**。
+对于简历来说，这个项目最大的亮点已经具备了：
+- **LangGraph 工作流编排**
+- **多 Tool Function Calling**
+- **Evidence-based Root Cause Analysis**
+- **Dashboard + Chat 双入口**
+- **统一 Diagnosis Agent（Root Cause + Comparison）**
+这些已经足够支撑你在面试中展示 Agent 开发能力。
+如果一定要在进入 Phase 4 前再补一个小功能，我只建议加 **Validation Node（先验证异常是否真实存在，再进入诊断）**。这个改动很小，却能明显提升整个 Agent 的可信度和工程成熟度。
+
+根据phase3已经完成的效果，为我更新readme文件，主要介绍当前该系统已经能实现的功能和系统亮点，以及后续可以继续完善和改进的地方。readme文件要求体现我的AI产品思维，体现我具备将agent产品落地化的能力。
+
+
+Phase 4：Report & Export Agent
+Goal：在现有 LangGraph Orchestrator 中增加 Report Agent，实现 AI 自动业务报告生成、Executive Summary、Markdown/PDF 导出、Dashboard & Chat 集成。
+开发原则：优先在现有架构上迭代，而不是新增文件。除非确实无法复用现有代码，否则不要创建新的 *_v3、*_new等文件。优先修改已有 LangGraph、Agent、Tool、API、Frontend 等模块，在原有文件中扩展功能。若必须新增文件，请先说明新增原因，并保证一个模块只保留一个正式版本，避免重复实现和项目结构混乱。完成每个 Task 后，请列出修改了哪些文件（Modified Files）和新增了哪些文件（New Files），新增文件应尽可能少，并遵循现有目录结构。
+Task 1：实现 Report Agent
+在现有 LangGraph Orchestrator 中新增 Report Agent，不要重新设计 Agent Framework，也不要新建 *_v2 文件。Report Agent 应复用现有 SQL Agent、Diagnosis Agent、Tool Calling 和 LangGraph State。支持两种模式：①当用户请求“生成周报”“生成月报”“生成业务总结”等时自动触发，直接根据数据库查询生成报告。②如果上一轮已经完成 Diagnosis，则自动读取 Diagnosis 的结果、Evidence 和 SQL 数据生成完整业务报告。保持当前项目结构，尽量修改已有模块，实现 Report Agent 成为整个 Agent Workflow 的最后一个节点。
+Task 2：实现 Executive Summary
+为 Report Agent 增加 Executive Summary 节点，输出风格参考真实运营周报，而不是简单复述数据。固定包含 Overall Business Performance、KPI Summary、Key Findings（3～5 条）、Root Causes、Recommended Actions、Next Week Focus 六部分。Root Causes 必须直接引用 Diagnosis Agent 的输出，不能重新推理；Key Findings 必须基于 SQL 查询结果生成；Recommended Actions 按优先级排序。整个 Summary 不允许编造数据库中不存在的数据，应尽可能引用已有 KPI、Chart 和 Diagnosis 结果形成完整业务汇报。
+Task 3：统一输出语言
+目前 Diagnosis Agent 默认输出英文，需要统一整个 Report Pipeline 的语言。默认输出中文，同时支持通过配置切换为英文，而不是修改多个 Prompt。语言配置应影响 Diagnosis、Executive Summary、Root Causes、Recommended Actions、Markdown、PDF 标题等所有文本内容，保证整份报告语言一致。尽量设计为统一配置项，方便未来扩展多语言支持。
+Task 4：实现统一导出（Markdown / PDF）
+新增 Report Export 功能，所有报告统一先生成 Markdown，再导出 PDF，不要单独维护另一套导出逻辑。导出的模板保持统一：首页显示标题、时间、站点和报告类型，然后依次展示 KPI Summary、Trend Charts、Diagnosis Summary、Key Findings、Recommended Actions、Next Week Focus。尽量复用 Dashboard 已有图表，不重新绘图，也不要新增独立导出系统。Report Agent 输出 Markdown 后即可完成预览与 PDF 导出。
+Task 5：支持 Chat 查询结果导出
+目前 Chat 查询 SQL 数据时只能展示前几行结果，大量数据无法查看。新增 Export 功能，当 SQL 返回完整 DataFrame 时，在聊天消息旁自动显示 Export 按钮，支持导出当前查询结果，而无需重新执行 SQL。支持导出 CSV、Markdown Table，Excel 可作为可选功能。即使查询结果较少，也保持一致的导出入口，形成统一的交互体验。
+Task 6：支持分析报告导出
+除了普通 SQL 查询，还应支持导出 Diagnosis、同比分析、环比分析等分析结果。用户可以直接导出最近一次根因分析、同比分析或环比分析，统一使用 Report Agent 模板生成 Markdown 和 PDF，而不是分别维护多套导出逻辑。导出的内容应包含 SQL 结果、图表、Diagnosis Summary、Key Findings、Executive Summary 和 Recommendations，实现所有分析结果统一导出。
+Task 7：Dashboard 接入 Report Agent
+在 Dashboard 中新增 Export Weekly Report 和 Export Monthly Report 两个入口。月报支持选择年份和月份，生成指定时间范围的业务报告。点击按钮后直接调用 Report Agent，生成报告预览，并支持下载 Markdown 和 PDF。保持当前 Dashboard UI 风格，不新增独立页面，尽量复用已有 Chart、Filter 和数据查询能力。
+Task 8：Chat 接入 Report Agent
+Chat 支持自然语言调用 Report Agent，例如“生成本周业务报告”“导出德国站 2026 年 7 月月报”“导出最近一次根因分析”“导出上面的查询结果”等。系统应自动识别用户意图，判断属于周报、月报、Diagnosis Report、Comparison Report 或 Query Export，并调用对应流程。生成完成后直接在聊天窗口展示报告预览，并提供 Markdown/PDF 下载入口，无需用户再次选择导出格式
+
+几个问题：
+1.没完成task5dashboard接入
+2.chat页面输入“生成本周德国站的业务报告”或者“生成2025年7月德国站fashion品类的业务报告”，只能输出“查询完成。意图: report_generation
+实体: {"report_type":"weekly"}”。无任何结果和导出按钮。
+2.chat页面输入“查询德国站过去一个月各品类的GMV”查询指令可以正常看到结果并下载csv和markdown；但是输入根因分析“为什么德国站GMV下降了”能看到分析结果，但只能下载markdown，下载pdf会弹出报错“导出失败: Export failed: Internal Server Error”。
