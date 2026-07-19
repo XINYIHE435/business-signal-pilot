@@ -25,7 +25,7 @@ const DATE_RANGES = [
   { label: 'Last 14 days', value: 14 },
   { label: 'Last 30 days', value: 30 },
   { label: 'Last Quarter (90 days)', value: 90 },
-  { label: '2024 Full Year', value: 365, isYear: 2024 },
+  // { label: '2024 Full Year', value: 365, isYear: 2024 },
   { label: '2025 Full Year', value: 365, isYear: 2025 },
 ]
 
